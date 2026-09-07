@@ -1,0 +1,3 @@
+# Keep the bundled native sources in the source distribution so it can be
+# rebuilt (from source) anywhere, staying fully self-contained.
+recursive-include holloman3/_native *

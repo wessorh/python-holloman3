@@ -1,0 +1,11 @@
+# compiled native library (rebuilt on install)
+holloman3/libholloman3.so
+holloman3/libholloman3.dll
+holloman3/libholloman3.dylib
+
+# python build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
