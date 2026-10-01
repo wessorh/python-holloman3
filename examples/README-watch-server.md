@@ -46,7 +46,7 @@ Drop a file into the watched directory; it will be fingerprinted and looked up
 on the next `CLOSE_WRITE`, e.g.:
 
 ```
-watching /tmp/inbox (order=13, grpc=localhost:8443)
+watching /tmp/inbox (order=13, grpc=api.dewile.net:8443)
 /tmp/inbox/sample.exe: h.00286058000750550000040500000000 [malicious] score=87 family=trojan.eshopscam category=code-injection
 ```
 
@@ -77,5 +77,5 @@ def noop(path, cluster_id, resp):
   ~64 MB. `holloman3.init(order)` must be called before `fingerprint()`.
 - The gRPC bindings are not committed; regenerate them with `./generate_grpc.sh`
   (override the proto path with `OMEGA_PROTO=...`).
-- `insecure = true` is the localhost default; set `insecure = false` for a TLS
-  endpoint (system CAs only — see omega-scan docs for mTLS options).
+- `insecure = false` is the default (TLS); set `insecure = true` only for a
+  local/self-signed endpoint (see omega-scan docs for mTLS options).

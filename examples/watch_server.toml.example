@@ -11,10 +11,10 @@ directory = "/path/to/watch"
 order = 13
 
 [server]
-# omega-scan gRPC address (host:port).
-address = "localhost:8443"
-# Use plaintext (no TLS). Set false to enable TLS with system roots.
-insecure = true
+# omega-scan gRPC address (host:port). Matches omega-scan's --server default.
+address = "api.dewile.net:8443"
+# Use plaintext (no TLS). Set true only for a local/self-signed endpoint.
+insecure = false
 
 [lookup]
 # Optional machine/deployment identifier sent in LookupRequest.
