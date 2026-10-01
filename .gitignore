@@ -9,3 +9,7 @@ dist/
 *.egg-info/
 __pycache__/
 *.pyc
+
+# generated gRPC bindings (regenerate with examples/generate_grpc.sh)
+examples/omega_pb2.py
+examples/omega_pb2_grpc.py

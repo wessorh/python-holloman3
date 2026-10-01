@@ -1,0 +1,6 @@
+# Dependencies for examples/watch_server.py
+grpcio
+protobuf
+watchdog
+# Only needed to regenerate the gRPC bindings (./generate_grpc.sh):
+# grpcio-tools

@@ -1,0 +1,23 @@
+# watch_server.toml.example — config for examples/watch_server.py
+# Copy to watch_server.toml and edit.
+
+[watch]
+# Directory to watch for new files (CLOSE_WRITE). REQUIRED.
+directory = "/path/to/watch"
+
+[holloman]
+# Hilbert-curve order for fingerprint generation. Default 13 covers files up
+# to ~64 MB. Set 0 to auto-detect per file (see holloman3 docs).
+order = 13
+
+[server]
+# omega-scan gRPC address (host:port).
+address = "localhost:8443"
+# Use plaintext (no TLS). Set false to enable TLS with system roots.
+insecure = true
+
+[lookup]
+# Optional machine/deployment identifier sent in LookupRequest.
+client_id = "watch-server-example"
+# Optional bearer token for higher server rate limits.
+api_token = ""
