@@ -1,4 +1,4 @@
-"""holloman3 — self-contained Python binding to the holloman3 AVX2 fingerprint.
+"""holloman3 — self-contained Python binding to the holloman3 fingerprint.
 
 The holloman3 perceptual fingerprint maps an input buffer through a Hilbert
 curve, downsamples it with a Lanczos-3 kernel, rotates the result 90°, and
@@ -12,7 +12,8 @@ Usage::
     holloman3.cleanup()
 
 ``init()`` must be called before ``fingerprint()``. Importing this package
-fails (exits) if AVX2 is not available — there is no scalar fallback.
+fails (exits) if no supported SIMD (AVX2/AVX1/NEON) is available — there is no
+scalar fallback.
 """
 
 from . import _lib
@@ -37,7 +38,8 @@ def cleanup():
 
 
 def is_avx2_available():
-    """Return True if the CPU supports AVX2."""
+    """Return True if a supported SIMD path is present (AVX2/AVX1 on x86-64,
+    NEON on ARM). The name is historical — it reports any supported SIMD."""
     return _lib.is_avx2_available()
 
 

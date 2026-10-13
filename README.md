@@ -4,17 +4,28 @@ A self-contained Python 3 binding to the **holloman3** perceptual fingerprint:
 Hilbert-curve mapping → Lanczos-3 downsampling → 90° rotation → a 16-byte
 digest rendered as `<order>.<32hex>` (e.g. `h.8181858176797a780707070800000000`).
 
-The package bundles the holloman3 **AVX2 assembly and C sources** and compiles
-them into a shared library at install time. It has **no scalar fallback** — if
-AVX2 is not present, it exits with an error message.
+The package bundles the holloman3 native sources (assembly + C) and compiles
+them into a shared library at install time. Three SIMD backends are supported,
+selected automatically for the target architecture:
+
+- **x86-64, AVX2** (256-bit) — Intel Haswell 2013+, AMD Zen 2017+.
+- **x86-64, AVX1 / SSE4.1** (128-bit) — Intel Sandy/Ivy Bridge 2011+, AMD
+  Bulldozer (CPUs with AVX1 but not AVX2).
+- **ARM, NEON** — aarch64 (ARMv8) and ARMv7+NEON.
+
+There is still **no scalar fallback**: if the CPU lacks the required SIMD, the
+package exits with an error.
 
 ---
 
 ## Requirements
 
-- **CPU with AVX2** (Intel Haswell 2013+, AMD Zen 2017+). Check on Linux:
-  `grep -q avx2 /proc/cpuinfo`
-- A C compiler (`gcc`) and GNU assembler (`as`).
+- **x86-64**: AVX2 (Intel Haswell 2013+ / AMD Zen 2017+) or at least AVX1/SSE4.1
+  (Intel Sandy/Ivy Bridge 2011+ / AMD Bulldozer). Check on Linux:
+  `grep -qE 'avx2|\bavx\b' /proc/cpuinfo`
+- **ARM**: aarch64 (ARMv8 — NEON is mandatory) or ARMv7 with NEON.
+- A C compiler + assembler: `gcc`/`as` on Linux, MinGW-w64 `gcc` on Windows, or
+  a native/cross ARM toolchain.
 - Python 3.8+.
 
 ## Install
@@ -23,9 +34,10 @@ AVX2 is not present, it exits with an error message.
 pip install .
 ```
 
-This compiles the bundled C + assembly into `holloman3/libholloman3.so` and
-installs the `holloman3` package. The build is Linux-only for now (see
-[Windows](#windows) below).
+This compiles the bundled C + assembly into `holloman3/libholloman3.so` (or
+`.dll` on Windows) and installs the `holloman3` package. `setup.py` selects the
+SIMD backend from `platform.machine()` — AVX2/AVX1 on x86-64, NEON on ARM — so
+the same `pip install .` works on all supported platforms.
 
 To run without installing, build the native library and put the project root
 on `PYTHONPATH`:
@@ -50,11 +62,11 @@ print(holloman3.fingerprint(data))          # "h.8181858176797a78070707080000000
 holloman3.cleanup()
 ```
 
-If the CPU lacks AVX2, importing the package prints an error to stderr and
-exits:
+If the CPU lacks the required SIMD (no AVX2/AVX1 on x86-64, or no NEON on ARM),
+importing the package prints an error to stderr and exits:
 
 ```
-holloman3: AVX2 is not supported on this CPU; refusing to run (no scalar fallback).
+holloman3: no supported SIMD (AVX2/AVX1/NEON) on this CPU; refusing to run (no scalar fallback).
 ```
 
 ---
@@ -66,7 +78,7 @@ holloman3: AVX2 is not supported on this CPU; refusing to run (no scalar fallbac
 | `holloman3.init(order=13)` | Allocate the Hilbert-curve cache. **Must be called before `fingerprint()`.** `order` must be ≥ the order required by your largest input. |
 | `holloman3.cleanup()` | Free the Hilbert-curve cache. |
 | `holloman3.fingerprint(data)` | Return the cluster id `<order_char>.<32-hex>` for `data` (a `bytes`-like object). |
-| `holloman3.is_avx2_available()` | Return `True`/`False`. |
+| `holloman3.is_avx2_available()` | Return `True` if a supported SIMD path is present (AVX2/AVX1 on x86-64, NEON on ARM). The name is historical — it reports *any* supported SIMD, not just AVX2. |
 | `holloman3.version()` | Return the bundled native library version string. |
 
 `fingerprint()` derives the leading order character automatically from the
@@ -155,7 +167,7 @@ portable (intrinsics-based CPUID, `_aligned_malloc` on `_WIN32`,
 pip install .       # builds holloman3/libholloman3.dll
 ```
 
-Requires an AVX2 CPU and a compiler that can assemble GAS `.s` files —
+Requires an AVX2 or AVX1 CPU and a compiler that can assemble GAS `.s` files —
 MinGW-w64 gcc (recommended) or clang targeting `x86_64-pc-windows-msvc`.
 
 The Windows build has been cross-compiled with MinGW and verified under Wine:

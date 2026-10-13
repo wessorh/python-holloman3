@@ -1,9 +1,10 @@
 """ctypes binding to the bundled holloman3 native shared library.
 
-The library is compiled from the AVX2 assembly + C sources bundled under
+The library is compiled from the native assembly + C sources bundled under
 `holloman3/_native/` at install time (see ``setup.py``). This module loads it,
 declares the C function signatures, and enforces the "no fallback" policy: if
-AVX2 is not available on this CPU, the process exits with an error.
+no supported SIMD (AVX2/AVX1 on x86-64, NEON on ARM) is available on this CPU,
+the process exits with an error.
 """
 
 import ctypes
@@ -41,7 +42,8 @@ _lib.holloman_version.restype = ctypes.c_char_p
 
 
 def is_avx2_available():
-    """Return True if the CPU supports AVX2."""
+    """Return True if a supported SIMD path is present (AVX2/AVX1 on x86-64,
+    NEON on ARM). The name is historical — it reports any supported SIMD."""
     return _lib.holloman_is_avx2_available() != 0
 
 
@@ -86,10 +88,10 @@ def fingerprint_raw(data):
     return bytes(out)
 
 
-# "No fallback" gate: exit with a clear message if AVX2 is unavailable.
+# "No fallback" gate: exit with a clear message if no supported SIMD is present.
 if not is_avx2_available():
     sys.stderr.write(
-        "holloman3: AVX2 is not supported on this CPU; refusing to run "
-        "(no scalar fallback).\n"
+        "holloman3: no supported SIMD (AVX2/AVX1/NEON) on this CPU; "
+        "refusing to run (no scalar fallback).\n"
     )
     sys.exit(1)
