@@ -220,7 +220,7 @@ int hilbert_map_buffer(const unsigned char *src_buffer, size_t src_len,
     
     // Allocate destination buffer (32-byte aligned for SIMD)
     unsigned char *dst = NULL;
-    if (posix_memalign((void**)&dst, 32, dst_size) != 0) {
+    if (HOLLOMAN_ALIGNED_ALLOC((void**)&dst, 32, dst_size) != 0) {
         return HILBERT_ERR_OUT_OF_MEMORY;
     }
     
@@ -303,7 +303,7 @@ int hilbert_map_buffer_cache_blocking(const unsigned char *src_buffer, size_t sr
     
     // Allocate destination buffer (32-byte aligned for SIMD)
     unsigned char *dst = NULL;
-    if (posix_memalign((void**)&dst, 32, dst_size) != 0) {
+    if (HOLLOMAN_ALIGNED_ALLOC((void**)&dst, 32, dst_size) != 0) {
         return HILBERT_ERR_OUT_OF_MEMORY;
     }
     
@@ -319,7 +319,7 @@ int hilbert_map_buffer_cache_blocking(const unsigned char *src_buffer, size_t sr
         g_hilbert_map_buffer_cache_blocking(src_buffer, dst, curve, src_len, dimension);
     } else {
         // Cache blocking not available - return error instead of falling back
-        free(dst);
+        HOLLOMAN_ALIGNED_FREE(dst);
         return HILBERT_ERR_NO_AVX2;
     }
     

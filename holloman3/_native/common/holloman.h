@@ -16,6 +16,19 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* DLL import/export. Define HOLLOMAN_BUILD_DLL when compiling the shared
+ * library so Windows exports the public symbols; consumers (and the ctypes
+ * binding) load them by name. */
+#if defined(_WIN32)
+  #if defined(HOLLOMAN_BUILD_DLL)
+    #define HOLLOMAN_API __declspec(dllexport)
+  #else
+    #define HOLLOMAN_API __declspec(dllimport)
+  #endif
+#else
+  #define HOLLOMAN_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,7 +43,7 @@ extern "C" {
  * @param order Hilbert curve order (recommended: 13)
  * @return 0 on success, negative error code on failure
  */
-int holloman_init(uint32_t order);
+HOLLOMAN_API int holloman_init(uint32_t order);
 
 /**
  * @brief Clean up Hilbert curve cache
@@ -39,7 +52,7 @@ int holloman_init(uint32_t order);
  * 
  * @return 0 on success, negative error code on failure
  */
-int holloman_cleanup(void);
+HOLLOMAN_API int holloman_cleanup(void);
 
 /**
  * @brief Generate fingerprint from file
@@ -50,7 +63,7 @@ int holloman_cleanup(void);
  * 
  * @note holloman_init() must be called before using this function
  */
-int holloman_fingerprint_file(const char *filename, uint8_t fingerprint[16]);
+HOLLOMAN_API int holloman_fingerprint_file(const char *filename, uint8_t fingerprint[16]);
 
 /**
  * @brief Generate fingerprint from buffer
@@ -62,7 +75,7 @@ int holloman_fingerprint_file(const char *filename, uint8_t fingerprint[16]);
  * 
  * @note holloman_init() must be called before using this function
  */
-int holloman_fingerprint_buffer(const uint8_t *data, size_t size, uint8_t fingerprint[16]);
+HOLLOMAN_API int holloman_fingerprint_buffer(const uint8_t *data, size_t size, uint8_t fingerprint[16]);
 
 /**
  * @brief Generate fingerprint from buffer using external scratch workspace
@@ -98,7 +111,7 @@ int holloman_fingerprint_buffer(const uint8_t *data, size_t size, uint8_t finger
  * holloman_cleanup();
  * @endcode
  */
-int holloman_fingerprint_buffer_external(
+HOLLOMAN_API int holloman_fingerprint_buffer_external(
     const uint8_t *data, 
     size_t size, 
     uint8_t fingerprint[16],
@@ -111,14 +124,14 @@ int holloman_fingerprint_buffer_external(
  * 
  * @return 1 if AVX2 is available, 0 otherwise
  */
-int holloman_is_avx2_available(void);
+HOLLOMAN_API int holloman_is_avx2_available(void);
 
 /**
  * @brief Get version string
  * 
  * @return Version string (e.g., "2.0.0")
  */
-const char* holloman_version(void);
+HOLLOMAN_API const char* holloman_version(void);
 
 #ifdef __cplusplus
 }

@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 // Function pointer types
 typedef void (*hilbert_d2xy_batch_func)(const uint32_t *distances, uint64_t *packed,
                                         size_t count, uint32_t order);
@@ -23,12 +27,11 @@ extern void hilbert_map_buffer_avx2_cache_blocking(const unsigned char *src,
                                                    const uint64_t *curve,
                                                    size_t count,
                                                    uint32_t dimension);
-#elif defined(__aarch64__) || defined(__ARM_NEON) || defined(__arm__)
-extern void hilbert_d2xy_batch_neon(const uint32_t *distances, uint64_t *packed,
-                                    size_t count, uint32_t order);
-extern void hilbert_map_buffer_neon_internal(const unsigned char *src, unsigned char *dst,
-                                             const uint64_t *curve, size_t count,
-                                             uint32_t dimension);
+extern void hilbert_d2xy_batch_sse41(const uint32_t *distances, uint64_t *packed,
+                                     size_t count, uint32_t order);
+extern void hilbert_map_buffer_sse41(const unsigned char *src, unsigned char *dst,
+                                     const uint64_t *curve, size_t count,
+                                     uint32_t dimension);
 #endif
 
 // Global function pointers
@@ -49,55 +52,69 @@ const char* hilbert_get_arch(void) {
 #endif
 }
 
-// SIMD capability detection
-int hilbert_has_simd(void) {
+// AVX2 (256-bit integer SIMD) capability detection.
+int hilbert_has_avx2(void) {
 #if defined(__x86_64__) || defined(_M_X64)
-    // Check for AVX2 support
-    unsigned int eax, ebx, ecx, edx;
-    
-    // Check if CPUID is supported
-    __asm__ __volatile__(
-        "pushfq\n\t"
-        "pushfq\n\t"
-        "xorq $0x200000, (%%rsp)\n\t"
-        "popfq\n\t"
-        "pushfq\n\t"
-        "popq %%rax\n\t"
-        "xorq (%%rsp), %%rax\n\t"
-        "popfq\n\t"
-        "andq $0x200000, %%rax\n\t"
-        : "=a" (eax)
-        :
-        : "cc"
-    );
-    
-    if (eax == 0) {
-        return 0;  // CPUID not supported
+#if defined(_MSC_VER)
+    // MSVC: __cpuid/__cpuidex + _xgetbv. Also verify the OS has enabled
+    // the XMM/YMM register state (XCR0[2:1] == 0b11), which Windows requires
+    // before AVX2 instructions can be used.
+    int regs[4] = {0, 0, 0, 0};
+    __cpuid(regs, 0);
+    if ((unsigned int)regs[0] < 7) {
+        return 0;  // CPUID leaf 7 unavailable
     }
-    
-    // Check for AVX2 (EBX bit 5 in leaf 7, sub-leaf 0)
-    __asm__ __volatile__(
-        "movl $7, %%eax\n\t"
-        "xorl %%ecx, %%ecx\n\t"
-        "cpuid\n\t"
-        : "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
-        : 
-        : 
-    );
-    
-    return (ebx & (1 << 5)) != 0;  // AVX2 bit
-    
-#elif defined(__aarch64__) || defined(__ARM_NEON) || defined(__arm__)
+    __cpuidex(regs, 7, 0);
+    if ((_xgetbv(0) & 0x6) != 0x6) {
+        return 0;  // OS does not support AVX2 state
+    }
+    return (regs[1] & (1 << 5)) != 0;  // AVX2 = EBX bit 5
+#else
+    // gcc / clang / MinGW: __builtin_cpu_supports checks CPUID leaf 7 + OSXSAVE.
+    return __builtin_cpu_supports("avx2") ? 1 : 0;
+#endif
+#else
+    return 0;
+#endif
+}
+
+// AVX1 (128-bit integer SIMD, 256-bit FP) capability detection. Covers CPUs
+// that have AVX but not AVX2 (Sandy/Ivy Bridge, Bulldozer); the SSE4.1 path
+// runs on these.
+int hilbert_has_avx1(void) {
+#if defined(__x86_64__) || defined(_M_X64)
+#if defined(_MSC_VER)
+    int regs[4] = {0, 0, 0, 0};
+    __cpuid(regs, 1);
+    if (!(regs[2] & (1 << 27))) {
+        return 0;  // OSXSAVE not set
+    }
+    if ((_xgetbv(0) & 0x6) != 0x6) {
+        return 0;  // OS has not enabled XMM/YMM state
+    }
+    return (regs[2] & (1 << 28)) != 0;  // AVX = ECX bit 28
+#else
+    return __builtin_cpu_supports("avx") ? 1 : 0;
+#endif
+#else
+    return 0;
+#endif
+}
+
+// SIMD capability detection: true if the compiled SIMD path (AVX2 or AVX1) is
+// available. On ARM this is always NEON (the NEON library is self-contained).
+int hilbert_has_simd(void) {
+#if defined(__aarch64__) || defined(__ARM_NEON) || defined(__arm__)
     // ARM NEON is always available on ARMv8 and can be checked on ARMv7
     #if defined(__aarch64__)
         return 1;  // NEON is mandatory on ARMv8
     #elif defined(__ARM_NEON)
         return 1;  // Compiled with NEON support
     #else
-        // On ARMv7, we'd need to check /proc/cpuinfo or use runtime detection
-        // For simplicity, assume NEON is available if compiled with it
         return 0;
     #endif
+#elif defined(__x86_64__) || defined(_M_X64)
+    return hilbert_has_avx2() || hilbert_has_avx1();
 #else
     return 0;
 #endif
@@ -113,13 +130,16 @@ void hilbert_init_arch(void) {
     }
     
 #if defined(__x86_64__) || defined(_M_X64)
-    g_hilbert_d2xy_batch_simd = hilbert_d2xy_batch_avx2;
-    g_hilbert_map_buffer_simd = hilbert_map_buffer_avx2_internal;
-    g_hilbert_map_buffer_cache_blocking = hilbert_map_buffer_avx2_cache_blocking;
-#elif defined(__aarch64__) || defined(__ARM_NEON) || defined(__arm__)
-    g_hilbert_d2xy_batch_simd = hilbert_d2xy_batch_neon;
-    g_hilbert_map_buffer_simd = hilbert_map_buffer_neon_internal;
-    g_hilbert_map_buffer_cache_blocking = NULL;  // Not implemented for ARM yet
+    if (hilbert_has_avx2()) {
+        g_hilbert_d2xy_batch_simd = hilbert_d2xy_batch_avx2;
+        g_hilbert_map_buffer_simd = hilbert_map_buffer_avx2_internal;
+        g_hilbert_map_buffer_cache_blocking = hilbert_map_buffer_avx2_cache_blocking;
+    } else {
+        // AVX1-only: 128-bit SSE4.1 path; no cache-blocking variant.
+        g_hilbert_d2xy_batch_simd = hilbert_d2xy_batch_sse41;
+        g_hilbert_map_buffer_simd = hilbert_map_buffer_sse41;
+        g_hilbert_map_buffer_cache_blocking = NULL;
+    }
 #endif
 }
 
@@ -130,7 +150,7 @@ const char* hilbert_get_simd_name(void) {
     }
     
 #if defined(__x86_64__) || defined(_M_X64)
-    return "AVX2";
+    return hilbert_has_avx2() ? "AVX2" : "AVX1 (SSE4.1)";
 #elif defined(__aarch64__)
     return "NEON (ARMv8)";
 #elif defined(__ARM_NEON) || defined(__arm__)

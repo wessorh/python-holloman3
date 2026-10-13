@@ -144,17 +144,21 @@ signature); `body` and `message` identify the specific content.
 
 ## Windows
 
-The bundled assembly is written for the Linux **System V AMD64 ABI** and the
-AVX2 CPUID check uses GCC inline assembly, so it does not build on Windows x64
-as-is. A Windows port requires:
+Windows x64 is supported. The package bundles both assembly variants — the
+System V AMD64 `.s` files for Linux and Microsoft x64 ABI `*_win64.s` files for
+Windows — and `setup.py` selects the right set at build time. The C sources are
+portable (intrinsics-based CPUID, `_aligned_malloc` on `_WIN32`,
+`__declspec(dllexport)`).
 
-1. Rewriting the 4 `.s` files for the Microsoft x64 ABI (RCX/RDX/R8/R9, shadow
-   space, `.seh_*` unwind info).
-2. A portable CPUID (`__cpuid`/`_xgetbv`) in `arch_detect.c`, including the
-   OSXSAVE/XCR0 check.
-3. `_aligned_malloc`/`_aligned_free` in place of `posix_memalign`.
-4. `__declspec(dllexport)` on the exported `holloman_*` functions.
-5. A MinGW-w64 gcc / clang / MSVC toolchain and `libholloman3.dll` output.
+```bash
+# On Windows (MinGW-w64 gcc on PATH):
+pip install .       # builds holloman3/libholloman3.dll
+```
 
-The build step is isolated in `setup.py:build_native()`, so this drops in
-without changing the Python API.
+Requires an AVX2 CPU and a compiler that can assemble GAS `.s` files —
+MinGW-w64 gcc (recommended) or clang targeting `x86_64-pc-windows-msvc`.
+
+The Windows build has been cross-compiled with MinGW and verified under Wine:
+the fingerprint output is byte-identical to Linux. It has not yet been run on a
+native Windows host. See `docs/windows-port.md` for the cross-compile recipe and
+the ABI port details.

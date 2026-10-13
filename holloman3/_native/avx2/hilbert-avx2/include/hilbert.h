@@ -20,6 +20,23 @@
 #include <stdint.h>
 #include <stddef.h>
 
+/* Portable 32-byte-aligned allocation.
+ *
+ * posix_memalign is POSIX-only. On Windows (MSVC and MinGW) the replacement is
+ * _aligned_malloc/_aligned_free, and _aligned_malloc memory MUST be released
+ * with _aligned_free (not free). These helpers normalize both sides so call
+ * sites stay portable.
+ */
+#if defined(_WIN32)
+  #include <malloc.h>
+  #define HOLLOMAN_ALIGNED_ALLOC(p, a, s) \
+      (((*(p) = _aligned_malloc((s), (a))) != NULL) ? 0 : -1)
+  #define HOLLOMAN_ALIGNED_FREE(p) _aligned_free(p)
+#else
+  #define HOLLOMAN_ALIGNED_ALLOC(p, a, s) posix_memalign((p), (a), (s))
+  #define HOLLOMAN_ALIGNED_FREE(p) free(p)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

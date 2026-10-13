@@ -12,8 +12,21 @@
 #include "hilbert-avx2/include/hilbert.h"
 #include "hilbert-avx2/include/hilbert_external_buffer.h"
 
-// External function from lanczos_avx2_optimized.c
+// External functions from lanczos_avx2_optimized.c / lanczos_sse41.c
 extern void downsample_lanczos3_avx2(uint8_t output[16], const uint8_t *input, int size);
+extern void downsample_lanczos3_sse41(uint8_t output[16], const uint8_t *input, int size);
+
+// Architecture dispatch (from arch_detect.c)
+extern int hilbert_has_avx2(void);
+
+// Select the AVX2 or SSE4.1 Lanczos path at runtime.
+static void downsample_lanczos3(uint8_t output[16], const uint8_t *input, int size) {
+    if (hilbert_has_avx2()) {
+        downsample_lanczos3_avx2(output, input, size);
+    } else {
+        downsample_lanczos3_sse41(output, input, size);
+    }
+}
 
 // Version string
 const char* holloman_version(void) {
@@ -112,13 +125,13 @@ int holloman_fingerprint_buffer(const uint8_t *data, size_t size, uint8_t finger
     
     // Verify it's actually a perfect square
     if (dimension * dimension != (int)mapped_len) {
-        free(mapped_buffer);
+        HOLLOMAN_ALIGNED_FREE(mapped_buffer);
         return -5;
     }
     
     // Downsample to 4x4 (16 bytes) using AVX2-optimized Lanczos-3
     uint8_t temp_result[16];
-    downsample_lanczos3_avx2(temp_result, mapped_buffer, dimension);
+    downsample_lanczos3(temp_result, mapped_buffer, dimension);
     
     // Rotate 90 degrees clockwise
     rotate_matrix_90_clockwise(fingerprint, temp_result);
@@ -170,7 +183,7 @@ int holloman_fingerprint_buffer_external(
     
     // Downsample to 4x4 (16 bytes) using AVX2-optimized Lanczos-3
     uint8_t temp_result[16];
-    downsample_lanczos3_avx2(temp_result, scratch_buffer, dimension);
+    downsample_lanczos3(temp_result, scratch_buffer, dimension);
     
     // Rotate 90 degrees clockwise
     rotate_matrix_90_clockwise(fingerprint, temp_result);

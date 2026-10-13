@@ -78,11 +78,11 @@ int hilbert_init(uint32_t order) {
     // Clear existing cache if present
     if (g_dual_cache.valid) {
         if (g_dual_cache.even_curve != NULL) {
-            free(g_dual_cache.even_curve);
+            HOLLOMAN_ALIGNED_FREE(g_dual_cache.even_curve);
             g_dual_cache.even_curve = NULL;
         }
         if (g_dual_cache.odd_curve != NULL) {
-            free(g_dual_cache.odd_curve);
+            HOLLOMAN_ALIGNED_FREE(g_dual_cache.odd_curve);
             g_dual_cache.odd_curve = NULL;
         }
         g_dual_cache.valid = 0;
@@ -91,13 +91,13 @@ int hilbert_init(uint32_t order) {
     // Initialize EVEN curve
     size_t even_points = HILBERT_TOTAL_POINTS(even_order);
     hilbert_packed_t *even_curve = NULL;
-    if (posix_memalign((void**)&even_curve, 32, even_points * sizeof(hilbert_packed_t)) != 0) {
+    if (HOLLOMAN_ALIGNED_ALLOC((void**)&even_curve, 32, even_points * sizeof(hilbert_packed_t)) != 0) {
         return HILBERT_ERR_OUT_OF_MEMORY;
     }
     
     uint32_t *even_distances = (uint32_t*)malloc(even_points * sizeof(uint32_t));
     if (even_distances == NULL) {
-        free(even_curve);
+        HOLLOMAN_ALIGNED_FREE(even_curve);
         return HILBERT_ERR_OUT_OF_MEMORY;
     }
     
@@ -109,7 +109,7 @@ int hilbert_init(uint32_t order) {
         g_hilbert_d2xy_batch_simd(even_distances, even_curve, even_points, even_order);
     } else {
         free(even_distances);
-        free(even_curve);
+        HOLLOMAN_ALIGNED_FREE(even_curve);
         return HILBERT_ERR_NO_AVX2;
     }
     free(even_distances);
@@ -117,15 +117,15 @@ int hilbert_init(uint32_t order) {
     // Initialize ODD curve
     size_t odd_points = HILBERT_TOTAL_POINTS(odd_order);
     hilbert_packed_t *odd_curve = NULL;
-    if (posix_memalign((void**)&odd_curve, 32, odd_points * sizeof(hilbert_packed_t)) != 0) {
-        free(even_curve);
+    if (HOLLOMAN_ALIGNED_ALLOC((void**)&odd_curve, 32, odd_points * sizeof(hilbert_packed_t)) != 0) {
+        HOLLOMAN_ALIGNED_FREE(even_curve);
         return HILBERT_ERR_OUT_OF_MEMORY;
     }
     
     uint32_t *odd_distances = (uint32_t*)malloc(odd_points * sizeof(uint32_t));
     if (odd_distances == NULL) {
-        free(even_curve);
-        free(odd_curve);
+        HOLLOMAN_ALIGNED_FREE(even_curve);
+        HOLLOMAN_ALIGNED_FREE(odd_curve);
         return HILBERT_ERR_OUT_OF_MEMORY;
     }
     
@@ -137,8 +137,8 @@ int hilbert_init(uint32_t order) {
         g_hilbert_d2xy_batch_simd(odd_distances, odd_curve, odd_points, odd_order);
     } else {
         free(odd_distances);
-        free(even_curve);
-        free(odd_curve);
+        HOLLOMAN_ALIGNED_FREE(even_curve);
+        HOLLOMAN_ALIGNED_FREE(odd_curve);
         return HILBERT_ERR_NO_AVX2;
     }
     free(odd_distances);
@@ -197,11 +197,11 @@ int hilbert_get_cached_curve(hilbert_packed_t **curve, size_t *size, uint32_t *o
 int hilbert_clear_cache(void) {
     if (g_dual_cache.valid) {
         if (g_dual_cache.even_curve != NULL) {
-            free(g_dual_cache.even_curve);
+            HOLLOMAN_ALIGNED_FREE(g_dual_cache.even_curve);
             g_dual_cache.even_curve = NULL;
         }
         if (g_dual_cache.odd_curve != NULL) {
-            free(g_dual_cache.odd_curve);
+            HOLLOMAN_ALIGNED_FREE(g_dual_cache.odd_curve);
             g_dual_cache.odd_curve = NULL;
         }
         g_dual_cache.valid = 0;
