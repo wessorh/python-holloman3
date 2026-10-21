@@ -1,15 +1,14 @@
-"""ctypes binding to the bundled holloman3 native shared library.
+"""ctypes binding to the libholloman3 shared library.
 
-The library is compiled from the native assembly + C sources bundled under
-`holloman3/_native/` at install time (see ``setup.py``). This module loads it,
-declares the C function signatures, and enforces the "no fallback" policy: if
-no supported SIMD (AVX2/AVX1 on x86-64, NEON on ARM) is available on this CPU,
-the process exits with an error.
+The two hot, byte-identical Lanczos-3 scaling passes (``vscale``/``hscale``)
+are implemented in libholloman3 (https://github.com/wessorh/libholloman3). This
+module loads that shared library and declares the C signatures. The rest of the
+fingerprint — Hilbert-curve mapping, kernel generation, rotation — is pure
+Python (see ``_fingerprint.py``).
 """
 
 import ctypes
 import os
-import sys
 
 # Maps a Hilbert-curve order index to the human-readable cluster-id letter.
 # Order 7 -> 'h', 10 -> 'k', 13 -> 'o'.
@@ -24,74 +23,60 @@ def _library_path():
         path = os.path.join(here, name)
         if os.path.exists(path):
             return path
-    raise FileNotFoundError(
-        "holloman3 native library not found. Build it with `pip install .` "
-        "(or `python setup.py build_py`)."
-    )
+    # Fall back to the dynamic-loader search path (e.g. system install).
+    return _LIB_NAMES[0]
 
 
 _lib = ctypes.CDLL(_library_path())
-
-_lib.holloman_init.argtypes = [ctypes.c_uint32]
-_lib.holloman_init.restype = ctypes.c_int
-_lib.holloman_cleanup.restype = ctypes.c_int
-_lib.holloman_fingerprint_buffer.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
-_lib.holloman_fingerprint_buffer.restype = ctypes.c_int
-_lib.holloman_is_avx2_available.restype = ctypes.c_int
-_lib.holloman_version.restype = ctypes.c_char_p
+_lib.holloman3_has_avx2.restype = ctypes.c_int
+_lib.holloman3_vscale.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t]
+_lib.holloman3_vscale.restype = None
+_lib.holloman3_hscale.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t]
+_lib.holloman3_hscale.restype = None
 
 
 def is_avx2_available():
-    """Return True if a supported SIMD path is present (AVX2/AVX1 on x86-64,
-    NEON on ARM). The name is historical — it reports any supported SIMD."""
-    return _lib.holloman_is_avx2_available() != 0
+    """Return True if the CPU supports AVX2 (with OSXSAVE enabled)."""
+    return _lib.holloman3_has_avx2() != 0
 
 
 def version():
-    """Return the bundled native library version string."""
-    v = _lib.holloman_version()
-    return v.decode("utf-8", "replace") if v else ""
+    """Return the library version string."""
+    return "0.2.0"
 
 
 def init(order):
-    """Initialize the Hilbert-curve cache. Returns the raw C return code."""
-    return _lib.holloman_init(ctypes.c_uint32(order))
+    """No-op retained for API compatibility (curve/kernel generated on demand)."""
+    return 0
 
 
 def cleanup():
-    """Free the Hilbert-curve cache. Returns the raw C return code."""
-    return _lib.holloman_cleanup()
+    """No-op retained for API compatibility."""
+    return 0
 
 
 def order_for_size(size):
-    """Return the Hilbert-curve order for a buffer size (mirrors the C
-    ``hilbert_calculate_order``: ``ceil(log2(size)/2)``)."""
+    """Return the Hilbert-curve order for a buffer size (ceil(log2(size)/2))."""
     if size <= 0:
         return 0
     return ((size - 1).bit_length() + 1) // 2
 
 
-def fingerprint_raw(data):
-    """Return the raw 16-byte fingerprint for ``data`` as ``bytes``.
-
-    ``init()`` must have been called first.
-    """
-    n = len(data)
-    if n == 0:
-        raise ValueError("empty buffer")
-
-    buf = ctypes.create_string_buffer(data, n)
-    out = (ctypes.c_ubyte * 16)()
-    ret = _lib.holloman_fingerprint_buffer(buf, ctypes.c_size_t(n), out)
-    if ret != 0:
-        raise RuntimeError("holloman_fingerprint_buffer failed: error code %d" % ret)
-    return bytes(out)
-
-
-# "No fallback" gate: exit with a clear message if no supported SIMD is present.
-if not is_avx2_available():
-    sys.stderr.write(
-        "holloman3: no supported SIMD (AVX2/AVX1/NEON) on this CPU; "
-        "refusing to run (no scalar fallback).\n"
+def vscale(dst, src, coeffs, size):
+    """Vertical Lanczos-3 scaling pass (dst/size*4, src/size*size, coeffs/4*size)."""
+    _lib.holloman3_vscale(
+        (ctypes.c_uint8 * len(dst)).from_buffer(dst),
+        (ctypes.c_uint8 * len(src)).from_buffer(src),
+        (ctypes.c_int32 * len(coeffs)).from_buffer(coeffs),
+        size,
     )
-    sys.exit(1)
+
+
+def hscale(dst, src, coeffs, size):
+    """Horizontal Lanczos-3 scaling pass (dst/16, src/size*4, coeffs/4*size)."""
+    _lib.holloman3_hscale(
+        (ctypes.c_uint8 * len(dst)).from_buffer(dst),
+        (ctypes.c_uint8 * len(src)).from_buffer(src),
+        (ctypes.c_int32 * len(coeffs)).from_buffer(coeffs),
+        size,
+    )

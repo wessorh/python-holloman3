@@ -4,46 +4,42 @@ A self-contained Python 3 binding to the **holloman3** perceptual fingerprint:
 Hilbert-curve mapping → Lanczos-3 downsampling → 90° rotation → a 16-byte
 digest rendered as `<order>.<32hex>` (e.g. `h.8181858176797a780707070800000000`).
 
-The package bundles the holloman3 native sources (assembly + C) and compiles
-them into a shared library at install time. Three SIMD backends are supported,
-selected automatically for the target architecture:
+The fingerprint's two SIMD scaling passes (Lanczos-3 vscale/hscale) are
+delegated to **libholloman3** (https://github.com/wessorh/libholloman3), vendored
+as a git submodule under `third_party/libholloman3`; everything else (Hilbert
+mapping, kernel generation, rotation) is pure Python. libholloman3 provides
+four byte-identical backends:
 
 - **x86-64, AVX2** (256-bit) — Intel Haswell 2013+, AMD Zen 2017+.
-- **x86-64, AVX1 / SSE4.1** (128-bit) — Intel Sandy/Ivy Bridge 2011+, AMD
-  Bulldozer (CPUs with AVX1 but not AVX2).
-- **ARM, NEON** — aarch64 (ARMv8) and ARMv7+NEON.
-
-There is still **no scalar fallback**: if the CPU lacks the required SIMD, the
-package exits with an error.
+- **x86-64, AVX1 / SSE4.1** (128-bit) — Intel Sandy/Ivy Bridge 2011+, AMD Bulldozer.
+- **ARM, NEON** — aarch64.
+- **scalar** — portable fallback (always available).
 
 ---
 
 ## Requirements
 
-- **x86-64**: AVX2 (Intel Haswell 2013+ / AMD Zen 2017+) or at least AVX1/SSE4.1
-  (Intel Sandy/Ivy Bridge 2011+ / AMD Bulldozer). Check on Linux:
-  `grep -qE 'avx2|\bavx\b' /proc/cpuinfo`
-- **ARM**: aarch64 (ARMv8 — NEON is mandatory) or ARMv7 with NEON.
-- A C compiler + assembler: `gcc`/`as` on Linux, MinGW-w64 `gcc` on Windows, or
-  a native/cross ARM toolchain.
 - Python 3.8+.
+- A C compiler + `make` (gcc/clang on Linux/macOS; MinGW-w64 on Windows; a
+  native/cross ARM toolchain on aarch64).
+- The libholloman3 submodule checked out (`git submodule update --init`).
 
 ## Install
 
 ```bash
+git submodule update --init --recursive
 pip install .
 ```
 
-This compiles the bundled C + assembly into `holloman3/libholloman3.so` (or
-`.dll` on Windows) and installs the `holloman3` package. `setup.py` selects the
-SIMD backend from `platform.machine()` — AVX2/AVX1 on x86-64, NEON on ARM — so
-the same `pip install .` works on all supported platforms.
+`setup.py` builds `libholloman3.so` by invoking the submodule's Makefile (which
+auto-detects AVX2/SSE4.1 vs NEON) and copies it into the package for ctypes to
+load.
 
-To run without installing, build the native library and put the project root
-on `PYTHONPATH`:
+To run without installing:
 
 ```bash
-python setup.py build_py            # builds holloman3/libholloman3.so
+make -C third_party/libholloman3 libholloman3.so
+cp third_party/libholloman3/libholloman3.so holloman3/
 PYTHONPATH=. python -c "import holloman3; print(holloman3.version())"
 ```
 
@@ -54,20 +50,12 @@ PYTHONPATH=. python -c "import holloman3; print(holloman3.version())"
 ```python
 import holloman3
 
-holloman3.init(13)                          # allocate the Hilbert-curve cache
-
 data = open("sample.bin", "rb").read()
 print(holloman3.fingerprint(data))          # "h.8181858176797a780707070800000000"
-
-holloman3.cleanup()
 ```
 
-If the CPU lacks the required SIMD (no AVX2/AVX1 on x86-64, or no NEON on ARM),
-importing the package prints an error to stderr and exits:
-
-```
-holloman3: no supported SIMD (AVX2/AVX1/NEON) on this CPU; refusing to run (no scalar fallback).
-```
+`init()` / `cleanup()` are retained for API compatibility but are no-ops — the
+Hilbert curve and Lanczos kernel are generated on demand and cached.
 
 ---
 

@@ -1,3 +1,4 @@
-# Keep the bundled native sources in the source distribution so it can be
-# rebuilt (from source) anywhere, staying fully self-contained.
-recursive-include holloman3/_native *
+# The libholloman3 C library is vendored as a git submodule under
+# third_party/libholloman3 (https://github.com/wessorh/libholloman3). Building
+# from a source distribution requires the submodule to be checked out:
+#   git submodule update --init --recursive

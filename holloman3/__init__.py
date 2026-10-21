@@ -1,65 +1,56 @@
-"""holloman3 — self-contained Python binding to the holloman3 fingerprint.
+"""holloman3 — Python binding to the holloman3 perceptual fingerprint.
 
-The holloman3 perceptual fingerprint maps an input buffer through a Hilbert
-curve, downsamples it with a Lanczos-3 kernel, rotates the result 90°, and
-returns 16 bytes, formatted as ``<order>.<32hex>``.
+The holloman3 fingerprint maps an input buffer through a Hilbert curve,
+downsamples it with a Lanczos-3 kernel, rotates the result 90°, and returns 16
+bytes, formatted as ``<order>.<32hex>``.
+
+The two SIMD scaling passes are delegated to libholloman3
+(https://github.com/wessorh/libholloman3); the rest (Hilbert mapping, kernel
+generation, rotation) is pure Python.
 
 Usage::
 
     import holloman3
-    holloman3.init(13)                       # allocate the curve cache
-    print(holloman3.fingerprint(data_bytes)) # "h.8181…"
-    holloman3.cleanup()
-
-``init()`` must be called before ``fingerprint()``. Importing this package
-fails (exits) if no supported SIMD (AVX2/AVX1/NEON) is available — there is no
-scalar fallback.
+    print(holloman3.fingerprint(data_bytes))  # "h.8181…"
 """
 
-from . import _lib
+from . import _fingerprint, _lib
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def init(order=13):
-    """Initialize the Hilbert-curve cache.
-
-    ``order`` is the maximum curve order; it must be >= the order required by
-    the largest buffer you fingerprint (order 13 covers messages up to ~64 MB).
-    """
-    ret = _lib.init(order)
-    if ret != 0:
-        raise RuntimeError("holloman_init(%d) failed: error code %d" % (order, ret))
+    """Initialize the fingerprint (no-op: the curve/kernel are generated on
+    demand). Retained for API compatibility."""
+    _lib.init(order)
 
 
 def cleanup():
-    """Free the Hilbert-curve cache."""
+    """Free cached state (no-op). Retained for API compatibility."""
     _lib.cleanup()
 
 
 def is_avx2_available():
-    """Return True if a supported SIMD path is present (AVX2/AVX1 on x86-64,
-    NEON on ARM). The name is historical — it reports any supported SIMD."""
+    """Return True if the CPU supports AVX2 (with OSXSAVE enabled)."""
     return _lib.is_avx2_available()
 
 
 def version():
-    """Return the bundled native library version string."""
+    """Return the library version string."""
     return _lib.version()
 
 
 def fingerprint(data):
     """Return the cluster id ``<order_char>.<32-hex-fingerprint>`` for ``data``.
 
-    ``data`` must be a non-empty ``bytes``-like object and ``init()`` must have
-    been called. The order character is derived automatically from the input
-    size.
+    ``data`` must be a non-empty ``bytes``-like object. The order character is
+    derived automatically from the input size.
     """
     n = len(data)
     if n == 0:
         raise ValueError("empty buffer")
 
     order = _lib.order_for_size(n)
-    raw = _lib.fingerprint_raw(data)
+    raw = _fingerprint.fingerprint_raw(data)
     ch = _lib.ORDER_ALPHABET[order] if order < len(_lib.ORDER_ALPHABET) else "?"
     return "%s.%s" % (ch, raw.hex())
